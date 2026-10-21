@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>跟进赛制 · 排名赛</title>
+<style>
+:root{
+  --bg:#0f1420; --panel:#181f2e; --panel2:#1f2a3d; --line:#2b3a55;
+  --txt:#e8eefb; --sub:#9fb0cc; --accent:#4f8cff; --accent2:#37c4a0;
+  --warn:#e0a13c; --lose:#5a6b8a; --radius:12px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--txt);font-family:"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;min-height:100vh;line-height:1.55}
+.wrap{max-width:1080px;margin:0 auto;padding:24px 16px 80px}
+h1{font-size:26px;letter-spacing:1px}
+h1 small{font-size:13px;color:var(--sub);font-weight:400;margin-left:10px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:18px 20px;margin-top:16px}
+.muted{color:var(--sub);font-size:13px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+button{cursor:pointer;border:1px solid var(--line);background:var(--panel2);color:var(--txt);
+  padding:9px 18px;border-radius:9px;font-size:14px;transition:.15s}
+button:hover:not(:disabled){border-color:var(--accent);transform:translateY(-1px)}
+button:disabled{opacity:.4;cursor:not-allowed}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+button.ghost{background:transparent}
+input[type=number]{background:var(--panel2);border:1px solid var(--line);color:var(--txt);
+  padding:9px 12px;border-radius:9px;font-size:15px;width:90px}
+.half-title{font-size:15px;color:var(--sub);margin:14px 0 8px;letter-spacing:2px}
+.groups{display:flex;flex-wrap:wrap;gap:8px}
+.chip{background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:8px 12px;font-size:15px}
+.chip.pair{border-color:var(--accent)}
+.chip .vs{color:var(--warn);font-weight:700;margin:0 6px}
+.chip .bye{color:var(--sub);font-size:12px}
+.match{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-top:10px}
+.match .tag{display:inline-block;font-size:11px;padding:2px 8px;border-radius:20px;background:#263450;color:var(--sub);margin-bottom:8px}
+.match.final .tag{background:var(--warn);color:#201503;font-weight:700}
+.fighters{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.fighter{min-width:64px;font-size:17px;font-weight:600;padding:10px 16px}
+.fighter.won{background:var(--accent2);border-color:var(--accent2);color:#04241c}
+.fighter.lostpick{opacity:.35}
+.vs{color:var(--sub);font-size:13px}
+.queue{background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:9px 13px;margin-top:8px;font-size:15px}
+.queue b{color:var(--accent2)}
+.queue .pend{color:var(--warn)}
+.queues{display:grid;grid-template-columns:1fr 1fr;gap:4px 22px}
+table{border-collapse:collapse;width:100%;margin-top:10px}
+th,td{border-bottom:1px solid var(--line);padding:9px 12px;text-align:center}
+th{color:var(--sub);font-weight:600;background:#151c2b}
+td.rk{font-weight:700;color:var(--accent)}
+.stats{display:flex;gap:26px;margin-top:14px;flex-wrap:wrap}
+.stat{font-size:15px}.stat b{font-size:22px;color:var(--accent2);margin-right:6px}
+details{margin-top:14px;color:var(--sub);font-size:13px}
+details summary{cursor:pointer;color:var(--accent)}
+.badge-done{color:var(--accent2);font-size:13px}
+@media(max-width:720px){.queues{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>跟进赛制 · 排名赛<small>2 ~ 32 人</small></h1>
+
+  <!-- 设置 -->
+  <div class="card" id="setupCard">
+    <div class="row">
+      <label>参赛人数</label>
+      <input type="number" id="numInput" min="2" max="32" value="11">
+      <button class="primary" id="startBtn">开始比赛</button>
+      <button class="ghost" id="shuffleBtn" title="重新随机落位">换一批随机落位</button>
+    </div>
+    <p class="muted" style="margin-top:10px">选手用编号 1~n 表示，随机落位后按「上小下多」分成上下两个半区，每个半区再分成 2 的整数幂个组（每组 1~2 人）。</p>
+    <div id="groupPreview"></div>
+  </div>
+
+  <!-- 当前轮 -->
+  <div class="card" id="roundCard" style="display:none">
+    <h2 id="roundTitle" style="font-size:18px"></h2>
+    <div id="matchList"></div>
+    <div class="row" style="margin-top:14px">
+      <button id="randBtn">随机填完本轮其余比赛</button>
+      <button class="primary" id="nextBtn" disabled>下一轮</button>
+      <span class="muted" id="roundInfo"></span>
+    </div>
+  </div>
+
+  <!-- 各组排名 -->
+  <div class="card" id="queueCard" style="display:none">
+    <h2 style="font-size:18px">各组当前排名</h2>
+    <div id="queueList" class="queues"></div>
+  </div>
+
+  <!-- 结果 -->
+  <div class="card" id="resultCard" style="display:none">
+    <h2 style="font-size:18px">最终名次</h2>
+    <table id="resultTable"></table>
+    <div class="stats">
+      <div class="stat"><b id="stRounds">0</b>总轮数</div>
+      <div class="stat"><b id="stMatches">0</b>总比赛场数</div>
+    </div>
+    <div class="row" style="margin-top:16px"><button class="primary" onclick="location.reload()">再来一局</button></div>
+  </div>
+
+  <details>
+    <summary>赛制规则说明</summary>
+    <p>① 所有选手随机落位 1~n，按「上小下多」二分成上下半区，每半区再分为 2 的整数幂个组（每组至多 2 人）。<br>
+    ② 第一轮：每组两人对战，单人组轮空，产生各组主将与副将。<br>
+    ③ 此后每轮：半区内相邻主将两两对决（主将战），败方主将及其队列降为其胜者的第二副将；若该主将名下有两个副将队列，则两副将对决（副将战），败方队列按「交替插入」并入胜方队列。只有一个副将时无需副将战，排名直接确定。<br>
+    ④ 最后一轮：两个半区的主将对决，败方整个队列按「交替插入」并入胜方队列，得到最终总名次。</p>
+  </details>
+</div>
+
+<script>
+/* ================= 引擎（已离线验证） ================= */
+function zip(w,l){const o=[];let i=0,j=0;while(i<w.length||j<l.length){if(i<w.length)o.push(w[i++]);if(j<l.length)o.push(l[j++]);}return o;}
+function groupCount(m){return m<=1?1:Math.pow(2,Math.ceil(Math.log2(m/2)));}
+function buildHalf(ids){ // ids: 该半区选手(已按落位顺序) → 组数组
+  const m=ids.length,g=groupCount(m),a=m-g,b=2*g-m,gs=[];let p=0;
+  for(let i=0;i<b;i++)gs.push([ids[p++]]);
+  for(let i=0;i<a;i++){gs.push([ids[p],ids[p+1]]);p+=2;}
+  return gs;
+}
+function shuffle(arr){const a=arr.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
+
+let S=null; // 全局状态
+
+function newTournament(n){
+  const ids=shuffle(Array.from({length:n},(_,i)=>i+1));
+  const t=Math.floor(n/2);
+  return {n,round:1,totalMatches:0,over:false,
+    halves:{top:[],bot:[]},matches:[],mid:null,
+    groups:{top:buildHalf(ids.slice(0,t)),bot:buildHalf(ids.slice(t))}};
+}
+
+/* ---------- 第 1 轮 ---------- */
+function startRound1(){
+  S.matches=[];
+  let k=1;
+  for(const h of['top','bot'])
+    S.groups[h].forEach((g,gi)=>{
+      if(g.length===2)S.matches.push({id:'m'+k++,type:'leaf',half:h,label:(h==='top'?'上半区':'下半区')+' · 第'+(gi+1)+'组',a:g[0],b:g[1],winner:null});
+    });
+}
+
+/* ---------- 生成一轮比赛 ---------- */
+function genRound(){
+  S.matches=[];let k=1;
+  const t=!!S.halves.top.length,b=!!S.halves.bot.length;
+  if(S.halves.top.length===1&&S.halves.bot.length===1){
+    S.matches.push({id:'m'+k++,type:'final',label:'最终决赛',a:S.halves.top[0].main,b:S.halves.bot[0].main,winner:null});
+    return;
+  }
+  for(const h of['top','bot']){
+    const nodes=S.halves[h];if(nodes.length<2)continue;
+    for(let i=0;i<nodes.length;i+=2)
+      S.matches.push({id:'m'+k++,type:'main',half:h,label:(h==='top'?'上半区':'下半区')+' · 主将战',a:nodes[i].main,b:nodes[i+1].main,winner:null});
+  }
+}
+
+/* ---------- 主将战全部决出后，生成副将战 ---------- */
+function genDeputy(){
+  let k=100;
+  for(const h of['top','bot']){
+    const nodes=S.halves[h];if(nodes.length<2)continue;
+    for(let i=0;i<nodes.length;i+=2){
+      const w=nodes[i+ (S.matches.find(m=>m.type==='main'&&m.half===h&&m.a===nodes[i].main&&m.b===nodes[i+1].main).winner===nodes[i].main?0:1)];
+      const l=w===nodes[i]?nodes[i+1]:nodes[i];
+      w.pend2=[l.main,...l.dep];
+      if(w.dep.length&&w.pend2.length)
+        S.matches.push({id:'d'+k++,type:'deputy',half:h,label:(h==='top'?'上半区':'下半区')+' · 副将战',boss:w.main,a:w.dep[0],b:w.pend2[0],winner:null});
+      else{w.dep=w.dep.length?w.dep:w.pend2;w.pend2=null;}
+    }
+  }
+}
+
+/* ---------- 本轮全部结束，结算 ---------- */
+function resolveRound(){
+  if(S.round===1){
+    let k=0;const leaf=S.matches.filter(m=>m.type==='leaf');
+    for(const h of['top','bot'])
+      S.halves[h]=S.groups[h].map(g=>{
+        if(g.length===1)return{main:g[0],dep:[]};
+        const m=leaf[k++];return m.winner===m.a?{main:m.a,dep:[m.b]}:{main:m.b,dep:[m.a]};
+      });
+    S.matches=[];S.round++;genRound();return;
+  }
+  const fm=S.matches.find(m=>m.type==='final');
+  if(fm){
+    const A=S.halves.top[0],B=S.halves.bot[0];
+    const wl=fm.winner===fm.a?[A.main,...A.dep]:[B.main,...B.dep];
+    const ll=fm.winner===fm.a?[B.main,...B.dep]:[A.main,...A.dep];
+    S.final=zip(wl,ll);S.over=true;return;
+  }
+  const nh={};
+  for(const h of['top','bot']){
+    const nodes=S.halves[h],out=[];
+    for(let i=0;i<nodes.length;i+=2){
+      if(i+1>=nodes.length){out.push(nodes[i]);continue;}
+      const A=nodes[i],B=nodes[i+1];
+      const m=S.matches.find(x=>x.type==='main'&&x.half===h&&x.a===A.main&&x.b===B.main);
+      const w=m.winner===m.a?A:B;
+      if(w.pend2){ // 有副将战
+        const d=S.matches.find(x=>x.type==='deputy'&&x.boss===w.main);
+        w.dep=d.winner===d.a?zip(w.dep,w.pend2):zip(w.pend2,w.dep);
+        w.pend2=null;
+      }
+      out.push(w);
+    }
+    nh[h]=out;
+  }
+  S.halves=nh;S.matches=[];S.round++;genRound();
+}
+
+/* ================= UI ================= */
+const $=id=>document.getElementById(id);
+function title(t){$( 'roundTitle').textContent=t;}
+
+function renderSetupPreview(){
+  if(!S){$('groupPreview').innerHTML='';return;}
+  let html='';
+  for(const h of['top','bot']){
+    html+='<div class="half-title">'+(h==='top'?'— 上半区 —':'— 下半区 —')+'</div><div class="groups">';
+    S.groups[h].forEach((g,i)=>{
+      html+=g.length===2
+        ?'<span class="chip pair">'+g[0]+'<span class="vs">vs</span>'+g[1]+'</span>'
+        :'<span class="chip">'+g[0]+' <span class="bye">轮空</span></span>';
+    });
+    html+='</div>';
+  }
+  $('groupPreview').innerHTML=html;
+}
+
+function renderMatches(){
+  const list=$('matchList');list.innerHTML='';
+  const typeName={leaf:'第一轮',main:'主将战',deputy:'副将战',final:'最终决赛'};
+  for(const m of S.matches){
+    const div=document.createElement('div');
+    div.className='match'+(m.type==='final'?' final':'');
+    div.innerHTML='<span class="tag">'+typeName[m.type]+'</span> <span class="muted">'+m.label+'</span>'+
+      '<div class="fighters">'+
+      '<button class="fighter" data-m="'+m.id+'" data-w="'+m.a+'">'+m.a+'</button><span class="vs">vs</span>'+
+      '<button class="fighter" data-m="'+m.id+'" data-w="'+m.b+'">'+m.b+'</button>'+
+      (m.winner?'<span class="badge-done">✓ '+m.winner+' 胜</span>':'')+
+      '</div>';
+    list.appendChild(div);
+  }
+  list.querySelectorAll('.fighter').forEach(btn=>btn.onclick=()=>choose(btn.dataset.m,parseInt(btn.dataset.w)));
+  refresh();
+}
+
+function refresh(){
+  // 高亮 + 下一轮按钮 + 副将战生成触发
+  document.querySelectorAll('.fighter').forEach(btn=>{
+    const m=S.matches.find(x=>x.id===btn.dataset.m);
+    btn.classList.toggle('won',m.winner===parseInt(btn.dataset.w));
+    btn.classList.toggle('lostpick',m.winner&&m.winner!==parseInt(btn.dataset.w));
+  });
+  const mains=S.matches.filter(m=>m.type==='main');
+  const allMainDone=mains.length>0&&mains.every(m=>m.winner);
+  const noMain=mains.length===0;
+  if((allMainDone||noMain)&&!S.matches.some(m=>m.type==='deputy')&&!S.deputyGen){
+    S.deputyGen=true;genDeputy();renderMatches();return;
+  }
+  const allDone=S.matches.length>0&&S.matches.every(m=>m.winner);
+  $('nextBtn').disabled=!allDone;
+  const done=S.matches.filter(m=>m.winner).length;
+  $('roundInfo').textContent='本轮 '+done+' / '+S.matches.length+' 场已决 · 累计 '+S.totalMatches+' 场';
+  renderQueues();
+}
+
+function renderQueues(){
+  if(!S||(!S.halves.top.length&&!S.halves.bot.length)){$('queueList').innerHTML='';return;}
+  let html='';
+  for(const h of['top','bot']){
+    html+='<div><div class="half-title">'+(h==='top'?'— 上半区 —':'— 下半区 —')+'</div>';
+    S.halves[h].forEach(nd=>{
+      if(nd.pend2)
+        html+='<div class="queue"><b>主将 '+nd.main+'</b>：<span class="pend">'+nd.main+' …（待副将战后确定）</span></div>';
+      else
+        html+='<div class="queue"><b>主将 '+nd.main+'</b>：'+[nd.main,...nd.dep].join(' - ')+'</div>';
+    });
+    html+='</div>';
+  }
+  $('queueList').innerHTML=html;
+}
+
+function choose(mid,w){
+  const m=S.matches.find(x=>x.id===mid);
+  if(m.winner)return;
+  m.winner=w;S.totalMatches++;
+  if(m.type==='leaf'){ // 立即在第1轮后可见
+  }
+  renderMatches();
+}
+
+$('randBtn').onclick=()=>{
+  S.matches.forEach(m=>{if(!m.winner){m.winner=Math.random()<.5?m.a:m.b;S.totalMatches++;}});
+  renderMatches();
+};
+
+$('nextBtn').onclick=()=>{
+  S.deputyGen=false;
+  resolveRound();
+  if(S.over){renderResult();return;}
+  title('第 '+S.round+' 轮'+(S.matches[0]&&S.matches[0].type==='final'?' · 最终决赛':''));
+  renderMatches();
+};
+
+function renderResult(){
+  $('roundCard').style.display='none';$('queueCard').style.display='none';
+  $('resultCard').style.display='block';
+  let html='<tr><th>名次</th><th>选手编号</th></tr>';
+  S.final.forEach((p,i)=>html+='<tr><td class="rk">'+(i+1)+'</td><td>'+p+'</td></tr>');
+  $('resultTable').innerHTML=html;
+  $('stRounds').textContent=S.round;
+  $('stMatches').textContent=S.totalMatches;
+}
+
+function begin(){
+  const n=Math.max(2,Math.min(32,parseInt($('numInput').value)||2));
+  $('numInput').value=n;
+  S=newTournament(n);
+  renderSetupPreview();
+  $('setupCard').style.display='none';
+  $('roundCard').style.display='block';$('queueCard').style.display='block';
+  title('第 1 轮 · 组内对决');
+  startRound1();
+  if(!S.matches.length){resolveRound();title('第 '+S.round+' 轮'+(S.matches[0]&&S.matches[0].type==='final'?' · 最终决赛':''));}
+  renderMatches();
+}
+
+$('startBtn').onclick=begin;
+$('shuffleBtn').onclick=()=>{
+  const n=Math.max(2,Math.min(32,parseInt($('numInput').value)||2));
+  S=newTournament(n);renderSetupPreview();
+};
+</script>
+</body>
+</html>
